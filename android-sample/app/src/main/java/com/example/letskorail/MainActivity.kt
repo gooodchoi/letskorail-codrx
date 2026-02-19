@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
@@ -389,8 +390,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun parseReserveResponse(raw: String): JSONObject {
         return try {
-            JSONObject(raw)
-        } catch (_: Exception) {
+            JSONObject(raw).also {
+                Log.d(TAG, "Parsed reserve response: $it")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse reserve response as JSON. raw=$raw", e)
             JSONObject().put("success", false).put("message", raw)
         }
     }
@@ -524,13 +528,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun callPython(module: PyObject, functionName: String, vararg args: Any): String {
         return try {
-            module.callAttr(functionName, *args).toString()
+            module.callAttr(functionName, *args).toString().also { result ->
+                Log.d(TAG, "Python call success [$functionName], args=${args.contentToString()}, result=$result")
+            }
         } catch (e: Exception) {
-            "오류: ${e.message}"
+            "오류: ${e.message}".also { errorMessage ->
+                Log.e(TAG, "Python call failed [$functionName], args=${args.contentToString()}, message=$errorMessage", e)
+            }
         }
     }
 
     companion object {
+        private const val TAG = "KorailMainActivity"
+
         private val LINE_TO_STATIONS: Map<String, Set<String>> = mapOf(
             "경부선" to setOf("경산", "경주", "광명", "구포", "김천(구미)", "대전", "동대구", "동탄", "물금", "밀양", "부산", "서대구", "서울", "수서", "수원", "영등포", "오송", "울산", "천안아산", "평택지제", "행신"),
             "호남선" to setOf("계룡", "공주", "광명", "광주송정", "김제", "나주", "논산", "동탄", "목포", "서대전", "서울", "수서", "오송", "용산", "익산", "장성", "정읍", "천안아산", "평택지제", "행신"),
