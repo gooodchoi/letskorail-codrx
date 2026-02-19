@@ -2,7 +2,7 @@ import json
 import time
 from threading import Lock
 from typing import Optional, Tuple
-
+from letskorail.train import TrainType
 from letskorail import Korail
 
 
@@ -45,7 +45,7 @@ def _seat_to_text(seat):
 
 
 def _reserve_with_session(korail: Korail, dpt: str, arv: str, date: str, min_time: str, max_time: str) -> str:
-    trains = korail.search_train(dpt, arv, date, min_time)
+    trains = korail.search_train(dpt, arv, date, min_time, train_type=TrainType.KTX_ALL)
 
     if not trains:
         return json.dumps({"success": False, "message": "조회된 열차가 없습니다."}, ensure_ascii=False)
