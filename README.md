@@ -13,7 +13,7 @@
 
 이후는 직접 코레일 앱에서 해야됩니다.
 
-예약 후 20분내로 결제를 완료해야 발권되고 이후엔 자동으로 취소됩니다.
+예약 후 10분내로 결제를 완료해야 발권되고 이후엔 자동으로 취소됩니다.
 
 예약 -> 결제 단계에서 디바이스의 [고유번호(uuid)](https://github.com/bsangmin/letskorail/blob/master/letskorail/korail.py#L664)를 요구합니다.
 
@@ -215,6 +215,16 @@ print(reservation.info)
 # 여정1: 부산(06:10) - 동대구(07:01)
 # 좌석1: 5호차 10D (어른)
 # 가격: 17,100원
+
+print(reservation.payment_countdown())
+# 🕒 09:59
+
+if reservation.is_payment_expired():
+    print(reservation.payment_failure_message)
+    # 결제 실패
+
+print(reservation.train_details)
+# [{"train_name": "KTX", "train_no": "008", ... }]
 ```
 
 ### 예약 조회

@@ -1,4 +1,5 @@
 import json
+import time
 
 from letskorail import Korail
 
@@ -12,6 +13,11 @@ def login(user_id: str, password: str) -> str:
         return "로그인 실패"
     except Exception as e:
         return f"로그인 오류: {e}"
+
+
+def _seat_to_text(seat):
+    psg = seat.psg_sub_type if seat.psg_sub_type else seat.psg_type
+    return f"{seat.car_no}호차 {seat.seat_no}({psg})"
 
 
 def reserve_once(
@@ -34,11 +40,31 @@ def reserve_once(
         for train in trains:
             if train.dpt_time <= max_time:
                 reservation = korail.reserve(train)
+                train_infos = []
+                for sq in sorted(reservation.train_info.keys(), key=lambda x: int(x)):
+                    info = reservation.train_info[sq]
+                    tr = info["train"]
+                    seats = info.get("seats", ())
+                    train_infos.append(
+                        {
+                            "train_name": tr.train_name,
+                            "train_no": tr.train_no,
+                            "departure": f"{tr.dpt_name} {tr.dpt_time[:2]}:{tr.dpt_time[2:4]}",
+                            "arrival": f"{tr.arv_name} {tr.arv_time[:2]}:{tr.arv_time[2:4]}",
+                            "seats": [_seat_to_text(s) for s in seats],
+                        }
+                    )
+
                 return json.dumps(
                     {
                         "success": True,
-                        "message": f"예약 성공: {reservation}",
-                        "train": f"{train.train_name} {train.train_no} ({train.dpt_time})",
+                        "message": "예약 성공",
+                        "reserved_at_epoch_ms": int(time.time() * 1000),
+                        "payment_timeout_sec": 10 * 60,
+                        "reservation_no": reservation.rsv_no,
+                        "price": reservation.total_price,
+                        "deadline": reservation._str_deadline(),
+                        "details": train_infos,
                     },
                     ensure_ascii=False,
                 )

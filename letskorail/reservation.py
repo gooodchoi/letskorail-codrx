@@ -1,5 +1,7 @@
 # coding=utf-8
 
+from datetime import datetime, timedelta
+
 from .train import Train
 
 
@@ -36,6 +38,8 @@ class Seat(object):
 
 
 class Reservation(object):
+    PAYMENT_TIMEOUT_MINUTES = 10
+
     # h_pnr_no
     rsv_no = None
     # h_jrny_sqno
@@ -60,6 +64,11 @@ class Reservation(object):
     # trains = None
 
     def __init__(self, data):
+        self.reserved_at = datetime.now()
+        self.payment_deadline = self.reserved_at + timedelta(
+            minutes=self.PAYMENT_TIMEOUT_MINUTES
+        )
+
         trs = data["train_infos"]["train_info"]
         tr = trs[0]
 
@@ -148,6 +157,57 @@ class Reservation(object):
             "\n".join(details),
             self._str_price(),
         )
+
+    def remaining_payment_seconds(self, now=None):
+        if now is None:
+            now = datetime.now()
+
+        remaining = self.payment_deadline - now
+        return max(0, int(remaining.total_seconds()))
+
+    def payment_countdown(self, now=None):
+        remaining = self.remaining_payment_seconds(now)
+        minutes, seconds = divmod(remaining, 60)
+        return "🕒 {:02d}:{:02d}".format(minutes, seconds)
+
+    def is_payment_expired(self, now=None):
+        return self.remaining_payment_seconds(now) == 0
+
+    @property
+    def payment_failure_message(self):
+        if self.is_payment_expired():
+            return "결제 실패"
+        return None
+
+    @property
+    def train_details(self):
+        srtd_sqce = sorted(self.train_info.keys(), key=(lambda x: int(x)))
+        details = []
+
+        for sq in srtd_sqce:
+            tr = self.train_info[sq]["train"]
+            seats = [
+                {
+                    "car_no": s.car_no,
+                    "seat_no": s.seat_no,
+                    "passenger_type": s.psg_sub_type if s.psg_sub_type else s.psg_type,
+                    "price": s.price,
+                }
+                for s in self.train_info[sq]["seats"]
+            ]
+            details.append(
+                {
+                    "train_name": tr.train_name,
+                    "train_no": tr.train_no,
+                    "departure_station": tr.dpt_name,
+                    "departure_time": tr.dpt_time,
+                    "arrival_station": tr.arv_name,
+                    "arrival_time": tr.arv_time,
+                    "seats": seats,
+                }
+            )
+
+        return details
 
     @property
     def info(self) -> str:

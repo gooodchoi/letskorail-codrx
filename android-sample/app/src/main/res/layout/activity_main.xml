@@ -211,6 +211,54 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp" />
             </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/reserveSuccessContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="예매 성공"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/textPaymentCountdown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="🕒 10:00"
+                    android:textColor="#D32F2F"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/textCompactReservationInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" />
+
+                <TextView
+                    android:id="@+id/textPaymentFail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="결제 실패"
+                    android:textColor="#D32F2F"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/buttonBackToReserve"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="확인"
+                    android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 </ScrollView>
