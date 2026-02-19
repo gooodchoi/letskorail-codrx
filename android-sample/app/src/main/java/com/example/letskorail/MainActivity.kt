@@ -479,6 +479,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showDatePicker(targetButton: Button) {
+        val today = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        if (selectedDate.before(today)) {
+            selectedDate.timeInMillis = today.timeInMillis
+        }
+
         val year = selectedDate.get(Calendar.YEAR)
         val month = selectedDate.get(Calendar.MONTH)
         val day = selectedDate.get(Calendar.DAY_OF_MONTH)
@@ -486,7 +497,9 @@ class MainActivity : AppCompatActivity() {
         DatePickerDialog(this, { _, y, m, d ->
             selectedDate.set(y, m, d)
             updateDateButtonText(targetButton)
-        }, year, month, day).show()
+        }, year, month, day).apply {
+            datePicker.minDate = today.timeInMillis
+        }.show()
     }
 
     private fun updateDateButtonText(button: Button) {
