@@ -2,6 +2,7 @@ import json
 import time
 
 from letskorail import Korail
+from letskorail.train import TrainType
 
 
 def login(user_id: str, password: str) -> str:
@@ -32,7 +33,7 @@ def reserve_once(
     """조회 1회 + 즉시 예매 1회 시도 결과를 JSON 문자열로 반환한다."""
     try:
         korail = Korail(user_id, password, auto_login=False)
-        trains = korail.search_train(dpt, arv, date, min_time)
+        trains = korail.search_train(dpt, arv, date, min_time, train_type=TrainType.KTX_ALL)
 
         if not trains:
             return json.dumps({"success": False, "message": "조회된 열차가 없습니다."}, ensure_ascii=False)
