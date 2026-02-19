@@ -4,8 +4,8 @@
 
 ## 구조
 
-- `settings.gradle`: 플러그인/의존성 저장소 및 모듈 포함 설정
-- `app/build.gradle`: Chaquopy 설정
+- `settings.gradle.kts`: 플러그인/의존성 저장소 및 모듈 포함 설정
+- `app/build.gradle.kts`: Chaquopy 설정
 - `app/src/main/java/com/example/letskorail/MainActivity.kt`: Kotlin에서 Python 함수 호출
 - `app/src/main/python/korail_bridge.py`: Kotlin이 호출할 파이썬 진입점
 - `app/src/main/python/letskorail/*`: 기존 letskorail 코드 복사본
