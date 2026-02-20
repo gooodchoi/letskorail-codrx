@@ -9,6 +9,8 @@
 - `app/src/main/java/com/example/letskorail/MainActivity.kt`: Kotlin에서 Python 함수 호출
 - `app/src/main/python/korail_bridge.py`: Kotlin이 호출할 파이썬 진입점
 - `app/src/main/python/letskorail/*`: 기존 letskorail 코드 복사본
+- `app/src/main/res/mipmap-anydpi-v26/ic_app_icon*.xml`: 앱 아이콘 리소스 진입점
+- `app/src/main/res/drawable/ic_app_icon_foreground.xml`: 교체 가능한 예시 앱 아이콘
 
 ## 동작
 
@@ -32,3 +34,9 @@ JAVA_HOME=/root/.local/share/mise/installs/java/17.0.2 PATH=$JAVA_HOME/bin:$PATH
 
 - 실제 결제/예매 API 호출이 발생할 수 있으므로 테스트 계정으로 확인하세요.
 - `buildPython` 경로는 개발 환경에 맞춰 수정해야 합니다.
+
+## 앱 아이콘 교체 방법
+
+- 현재 앱 아이콘은 `@mipmap/ic_app_icon`으로 연결되어 있습니다.
+- 나중에 실제 이미지를 적용할 때는 `ic_app_icon_foreground.xml` 대신 같은 이름의 PNG/WebP(또는 Vector) 파일로 교체하면 즉시 반영됩니다.
+- 배경 색상만 바꾸고 싶으면 `ic_app_icon_background.xml`의 색상 값만 수정하면 됩니다.

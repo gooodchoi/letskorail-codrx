@@ -84,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         val datePickerButton = findViewById<Button>(R.id.buttonDatePicker)
         val swapStationsButton = findViewById<Button>(R.id.buttonSwapStations)
         val reserveStartButton = findViewById<Button>(R.id.buttonStartReserve)
+        val logoutButton = findViewById<Button>(R.id.buttonLogout)
 
         resultText = findViewById(R.id.textResult)
         loginErrorText = findViewById(R.id.textLoginError)
@@ -200,6 +201,10 @@ class MainActivity : AppCompatActivity() {
 
         buttonBackToReserve.setOnClickListener {
             showReservePageAfterFailure()
+        }
+
+        logoutButton.setOnClickListener {
+            performLogout(bridge)
         }
     }
 
@@ -556,6 +561,26 @@ class MainActivity : AppCompatActivity() {
         val min = digits.substring(2, 4).toIntOrNull() ?: return null
         if (hour !in 0..23 || min !in 0..59) return null
         return String.format(Locale.KOREA, "%02d%02d00", hour, min)
+    }
+
+    private fun performLogout(bridge: PyObject) {
+        isReserving = false
+        countdownRunnable?.let { countdownHandler.removeCallbacks(it) }
+
+        val result = callPython(bridge, "logout")
+        if (result.startsWith("로그아웃 성공")) {
+            Toast.makeText(this, "로그아웃 되었습니다.", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, result, Toast.LENGTH_SHORT).show()
+        }
+
+        reserveContainer.visibility = View.GONE
+        loginContainer.visibility = View.VISIBLE
+        loginErrorText.visibility = View.GONE
+        reserveProgressContainer.visibility = View.GONE
+        reserveSuccessContainer.visibility = View.GONE
+        reserveFormContainer.visibility = View.VISIBLE
+        resultText.text = ""
     }
 
     private fun callPython(module: PyObject, functionName: String, vararg args: Any): String {
