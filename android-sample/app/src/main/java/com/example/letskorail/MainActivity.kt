@@ -16,6 +16,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
@@ -81,6 +82,7 @@ class MainActivity : AppCompatActivity() {
         val maxTimeInput = findViewById<EditText>(R.id.editMaxTime)
         val avgIntervalInput = findViewById<EditText>(R.id.editAvgInterval)
         val datePickerButton = findViewById<Button>(R.id.buttonDatePicker)
+        val swapStationsButton = findViewById<Button>(R.id.buttonSwapStations)
         val reserveStartButton = findViewById<Button>(R.id.buttonStartReserve)
 
         resultText = findViewById(R.id.textResult)
@@ -116,6 +118,15 @@ class MainActivity : AppCompatActivity() {
 
         datePickerButton.setOnClickListener {
             showDatePicker(datePickerButton)
+        }
+
+        swapStationsButton.setOnClickListener {
+            val from = departureInput.text.toString().trim()
+            val to = arrivalInput.text.toString().trim()
+            departureInput.setText(to, false)
+            arrivalInput.setText(from, false)
+            refreshStationSuggestions(departureInput, arrivalInput, departureAdapter)
+            refreshStationSuggestions(arrivalInput, departureInput, arrivalAdapter)
         }
 
         loginButton.setOnClickListener {
@@ -211,11 +222,17 @@ class MainActivity : AppCompatActivity() {
         departureInput.addTextChangedListener(SimpleTextWatcher {
             refreshStationSuggestions(departureInput, arrivalInput, departureAdapter)
             refreshStationSuggestions(arrivalInput, departureInput, arrivalAdapter)
+            if (departureInput.hasFocus() && departureInput.text.toString().trim().isEmpty()) {
+                departureInput.post { departureInput.showDropDown() }
+            }
         })
 
         arrivalInput.addTextChangedListener(SimpleTextWatcher {
             refreshStationSuggestions(arrivalInput, departureInput, arrivalAdapter)
             refreshStationSuggestions(departureInput, arrivalInput, departureAdapter)
+            if (arrivalInput.hasFocus() && arrivalInput.text.toString().trim().isEmpty()) {
+                arrivalInput.post { arrivalInput.showDropDown() }
+            }
         })
 
         departureInput.setOnFocusChangeListener { _, hasFocus ->
@@ -230,6 +247,16 @@ class MainActivity : AppCompatActivity() {
                 refreshStationSuggestions(arrivalInput, departureInput, arrivalAdapter)
                 arrivalInput.showDropDown()
             }
+        }
+
+        departureInput.setOnClickListener {
+            refreshStationSuggestions(departureInput, arrivalInput, departureAdapter)
+            departureInput.showDropDown()
+        }
+
+        arrivalInput.setOnClickListener {
+            refreshStationSuggestions(arrivalInput, departureInput, arrivalAdapter)
+            arrivalInput.showDropDown()
         }
 
         departureInput.setOnItemClickListener { _, _, _, _ ->
@@ -408,6 +435,10 @@ class MainActivity : AppCompatActivity() {
         if (!areConnectedStations(selectedStation, targetValue)) {
             targetField.setText("", false)
             Toast.makeText(this, "선택한 역과 연결되는 역만 선택할 수 있습니다.", Toast.LENGTH_SHORT).show()
+            targetField.post {
+                targetField.requestFocus()
+                targetField.showDropDown()
+            }
         }
     }
 
@@ -480,6 +511,7 @@ class MainActivity : AppCompatActivity() {
         reserveFormContainer.visibility = View.VISIBLE
         reserveProgressContainer.visibility = View.GONE
         reserveSuccessContainer.visibility = View.GONE
+        window.statusBarColor = ContextCompat.getColor(this, R.color.midnight)
     }
 
     private fun showDatePicker(targetButton: Button) {
