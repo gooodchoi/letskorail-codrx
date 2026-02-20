@@ -122,3 +122,19 @@ def reserve_once(
             return _reserve_with_session(korail, dpt, arv, date, min_time, max_time)
         except Exception as e:
             return json.dumps({"success": False, "message": f"예약 오류: {e}"}, ensure_ascii=False)
+
+
+def logout() -> str:
+    """현재 로그인 세션을 정리한다."""
+    global _SESSION_KORAIL, _SESSION_AUTH
+
+    with _SESSION_LOCK:
+        try:
+            if _SESSION_KORAIL and getattr(_SESSION_KORAIL, "logined", False):
+                _SESSION_KORAIL.logout()
+            return "로그아웃 성공"
+        except Exception as e:
+            return f"로그아웃 오류: {e}"
+        finally:
+            _SESSION_KORAIL = None
+            _SESSION_AUTH = None
