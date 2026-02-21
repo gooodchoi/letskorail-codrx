@@ -2,7 +2,11 @@ package com.example.letskorail
 
 import android.app.AlertDialog
 import android.app.DatePickerDialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -15,7 +19,10 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
@@ -67,10 +74,13 @@ class MainActivity : AppCompatActivity() {
     private val countdownHandler = Handler(Looper.getMainLooper())
     private var paymentDeadlineMs: Long = 0L
     private var countdownRunnable: Runnable? = null
+    private var isAppInForeground = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        createNotificationChannel()
+        ensureNotificationPermission()
 
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
@@ -264,6 +274,16 @@ class MainActivity : AppCompatActivity() {
         isReservationPaused = false
     }
 
+    override fun onStart() {
+        super.onStart()
+        isAppInForeground = true
+    }
+
+    override fun onStop() {
+        super.onStop()
+        isAppInForeground = false
+    }
+
     private fun setupStationSelectors() {
         departureAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mutableListOf<String>())
         arrivalAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, mutableListOf<String>())
@@ -415,11 +435,68 @@ class MainActivity : AppCompatActivity() {
         buttonBackToReserve.visibility = View.GONE
         startCountdownUi()
 
+        if (!isAppInForeground) {
+            showBackgroundSuccessNotification(popupText)
+            return
+        }
+
         AlertDialog.Builder(this)
             .setTitle("🎉 예매 성공")
             .setMessage(popupText)
             .setPositiveButton("확인", null)
             .show()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return
+        }
+
+        val channel = NotificationChannel(
+            NOTIFICATION_CHANNEL_ID,
+            "예매 알림",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "백그라운드에서 예매 성공 시 상단바 푸시 알림을 표시합니다."
+        }
+
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return
+        }
+
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_POST_NOTIFICATIONS
+        )
+    }
+
+    private fun showBackgroundSuccessNotification(message: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_app_icon)
+            .setContentTitle("LET'S KORAIL 예매 성공")
+            .setContentText("탭해서 예매 정보를 확인하세요.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+
+        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID_RESERVATION_SUCCESS, notification)
     }
 
     private fun startCountdownUi() {
@@ -681,6 +758,9 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "KorailMainActivity"
+        private const val NOTIFICATION_CHANNEL_ID = "reservation_success_channel"
+        private const val NOTIFICATION_ID_RESERVATION_SUCCESS = 1001
+        private const val REQUEST_POST_NOTIFICATIONS = 2001
 
         private val LINE_TO_STATIONS: Map<String, Set<String>> = mapOf(
             "경부선" to setOf("경산", "경주", "광명", "구포", "김천(구미)", "대전", "동대구", "동탄", "물금", "밀양", "부산", "서대구", "서울", "수서", "수원", "영등포", "오송", "울산", "천안아산", "평택지제", "행신"),
