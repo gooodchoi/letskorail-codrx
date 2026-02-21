@@ -16,16 +16,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        python {
-            // 개발 환경에 맞는 Python 실행 파일 경로로 수정하세요.
-            // 예: /usr/bin/python3
-            buildPython = "/usr/bin/python3"
-
-            pip {
-                install("requests>=2.32.3")
-                install("cryptography>=42.0.8")
-            }
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 
@@ -54,4 +46,14 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+}
+
+chaquopy {
+    defaultConfig {
+        pip {
+            install("requests>=2.32.3")
+            install("cryptography>=42.0.8")
+            install("six") // 👉 범인 검거! 이 한 줄을 추가합니다.
+        }
+    }
 }

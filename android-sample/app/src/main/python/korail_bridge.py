@@ -13,11 +13,8 @@ _SESSION_AUTH: Optional[Tuple[str, str]] = None
 
 def _create_korail(user_id: str, password: str) -> Korail:
     """호출 환경에서 사용 중인 Korail 생성자 시그니처를 모두 지원한다."""
-    try:
-        korail = Korail(user_id, password, auto_login=False)
-    except TypeError:
-        korail = Korail()
-        korail.login(user_id, password)
+    korail = Korail()
+    korail.login(user_id, password)
     return korail
 
 
@@ -28,6 +25,7 @@ def _get_korail(user_id: str, password: str, force_refresh: bool = False) -> Kor
     with _SESSION_LOCK:
         same_user = _SESSION_AUTH == (user_id, password)
         if not force_refresh and same_user and _SESSION_KORAIL and getattr(_SESSION_KORAIL, "logined", False):
+            print("here")
             return _SESSION_KORAIL
 
         korail = _create_korail(user_id, password)

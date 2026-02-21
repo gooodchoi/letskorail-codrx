@@ -12,6 +12,7 @@ from .exceptions import (
     NoResultsError,
     SoldOutError,
     DiscountError,
+    LoginError
 )
 from .train import Train, Trains, TrainType, Car, Cars
 from .passenger import AdultPsg, Passenger
@@ -184,6 +185,8 @@ class Korail(object):
 
         if result_checker(rst):
             self._cust_no = rst.get("strCustNo")
+            if not self._cust_no:
+                raise LoginError(rst.get("h_msg_txt", "Wrong id or password"), rst.get("h_msg_cd"))
             self.logined = True
 
             return Profile(rst)
