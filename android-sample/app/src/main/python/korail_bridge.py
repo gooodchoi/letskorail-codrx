@@ -122,6 +122,28 @@ def reserve_once(
             return json.dumps({"success": False, "message": f"예약 오류: {e}"}, ensure_ascii=False)
 
 
+
+def cancel_reservation(reservation_no: str) -> str:
+    """예약번호로 현재 예약을 취소한다."""
+    if not reservation_no:
+        return json.dumps({"success": False, "message": "예약번호가 없습니다."}, ensure_ascii=False)
+
+    with _SESSION_LOCK:
+        if not _SESSION_KORAIL or not getattr(_SESSION_KORAIL, "logined", False):
+            return json.dumps({"success": False, "message": "로그인된 세션이 없습니다."}, ensure_ascii=False)
+
+        try:
+            reservations = _SESSION_KORAIL.reservations(reservation_no)
+            if not reservations:
+                return json.dumps({"success": False, "message": "취소할 예약을 찾지 못했습니다."}, ensure_ascii=False)
+
+            target = reservations[0]
+            if _SESSION_KORAIL.cancel(target):
+                return json.dumps({"success": True, "message": f"예약({reservation_no})을 취소했습니다."}, ensure_ascii=False)
+            return json.dumps({"success": False, "message": "예약 취소에 실패했습니다."}, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"success": False, "message": f"예약 취소 오류: {e}"}, ensure_ascii=False)
+
 def logout() -> str:
     """현재 로그인 세션을 정리한다."""
     global _SESSION_KORAIL, _SESSION_AUTH

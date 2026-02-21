@@ -45,6 +45,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var countdownText: TextView
     private lateinit var paymentFailText: TextView
     private lateinit var buttonBackToReserve: Button
+    private lateinit var buttonReservePrevious: Button
+    private lateinit var buttonReserveToggle: Button
+    private lateinit var buttonCancelReservation: Button
 
     private lateinit var departureInput: AutoCompleteTextView
     private lateinit var arrivalInput: AutoCompleteTextView
@@ -55,6 +58,11 @@ class MainActivity : AppCompatActivity() {
 
     @Volatile
     private var isReserving = false
+
+    @Volatile
+    private var isReservationPaused = false
+
+    private var latestReservationNo: String? = null
 
     private val countdownHandler = Handler(Looper.getMainLooper())
     private var paymentDeadlineMs: Long = 0L
@@ -100,6 +108,9 @@ class MainActivity : AppCompatActivity() {
         countdownText = findViewById(R.id.textPaymentCountdown)
         paymentFailText = findViewById(R.id.textPaymentFail)
         buttonBackToReserve = findViewById(R.id.buttonBackToReserve)
+        buttonReservePrevious = findViewById(R.id.buttonReservePrevious)
+        buttonReserveToggle = findViewById(R.id.buttonReserveToggle)
+        buttonCancelReservation = findViewById(R.id.buttonCancelReservation)
 
         setupStationSelectors()
 
@@ -199,8 +210,46 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
+        buttonReservePrevious.setOnClickListener {
+            stopReservationLoopAndReturnToForm()
+        }
+
+        buttonReserveToggle.setOnClickListener {
+            if (!isReserving) {
+                return@setOnClickListener
+            }
+
+            if (isReservationPaused) {
+                isReservationPaused = false
+                updateReserveToggleButton(isPaused = false)
+                resultText.text = "예매를 다시 시작합니다. 조건에 맞는 열차를 재조회합니다."
+            } else {
+                isReservationPaused = true
+                updateReserveToggleButton(isPaused = true)
+                resultText.text = "예매를 일시중지했습니다. 시작 버튼으로 다시 진행할 수 있습니다."
+            }
+        }
+
         buttonBackToReserve.setOnClickListener {
             showReservePageAfterFailure()
+        }
+
+        buttonCancelReservation.setOnClickListener {
+            val reservationNo = latestReservationNo
+            if (reservationNo.isNullOrBlank()) {
+                Toast.makeText(this, "취소할 예약번호를 찾을 수 없습니다.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val response = callPython(bridge, "cancel_reservation", reservationNo)
+            val parsed = parseReserveResponse(response)
+            val message = parsed.optString("message", "예매 취소 요청을 처리했습니다.")
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+
+            if (parsed.optBoolean("success", false)) {
+                latestReservationNo = null
+                showReservePageAfterFailure()
+            }
         }
 
         logoutButton.setOnClickListener {
@@ -212,6 +261,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         countdownRunnable?.let { countdownHandler.removeCallbacks(it) }
         isReserving = false
+        isReservationPaused = false
     }
 
     private fun setupStationSelectors() {
@@ -287,9 +337,12 @@ class MainActivity : AppCompatActivity() {
         avgIntervalSec: Double
     ) {
         isReserving = true
+        isReservationPaused = false
+        latestReservationNo = null
         reserveSuccessContainer.visibility = View.GONE
         reserveFormContainer.visibility = View.GONE
         reserveProgressContainer.visibility = View.VISIBLE
+        updateReserveToggleButton(isPaused = false)
 
         val startedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date())
         startedAtText.text = "시작 시간: $startedAt"
@@ -300,6 +353,11 @@ class MainActivity : AppCompatActivity() {
         Thread {
             var attempts = 0
             while (isReserving) {
+                if (isReservationPaused) {
+                    Thread.sleep(200)
+                    continue
+                }
+
                 attempts += 1
                 runOnUiThread {
                     attemptCountText.text = "조회 시도: ${attempts}회"
@@ -346,6 +404,7 @@ class MainActivity : AppCompatActivity() {
         reserveProgressContainer.visibility = View.GONE
         reserveSuccessContainer.visibility = View.VISIBLE
 
+        latestReservationNo = parsed.optString("reservation_no", null)
         val popupText = buildCompactReservationText(parsed)
         compactInfoText.text = popupText
 
@@ -413,11 +472,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showReservePageAfterFailure() {
+        isReserving = false
+        isReservationPaused = false
         reserveSuccessContainer.visibility = View.GONE
         reserveProgressContainer.visibility = View.GONE
         reserveFormContainer.visibility = View.VISIBLE
         resultText.text = ""
         countdownRunnable?.let { countdownHandler.removeCallbacks(it) }
+    }
+
+    private fun stopReservationLoopAndReturnToForm() {
+        isReserving = false
+        isReservationPaused = false
+        nextDelayText.text = "다음 조회 대기: 중지됨"
+        resultText.text = "예매 진행을 중지하고 조건 설정 화면으로 돌아왔습니다."
+        reserveProgressContainer.visibility = View.GONE
+        reserveFormContainer.visibility = View.VISIBLE
+    }
+
+    private fun updateReserveToggleButton(isPaused: Boolean) {
+        if (isPaused) {
+            buttonReserveToggle.text = "시작"
+            buttonReserveToggle.background = ContextCompat.getDrawable(this, R.drawable.bg_primary_button)
+        } else {
+            buttonReserveToggle.text = "취소"
+            buttonReserveToggle.background = ContextCompat.getDrawable(this, R.drawable.bg_danger_button)
+        }
     }
 
     private fun parseReserveResponse(raw: String): JSONObject {
@@ -511,6 +591,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showReservePage() {
+        isReserving = false
+        isReservationPaused = false
         loginContainer.visibility = View.GONE
         reserveContainer.visibility = View.VISIBLE
         reserveFormContainer.visibility = View.VISIBLE
@@ -565,6 +647,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun performLogout(bridge: PyObject) {
         isReserving = false
+        isReservationPaused = false
+        latestReservationNo = null
         countdownRunnable?.let { countdownHandler.removeCallbacks(it) }
 
         val result = callPython(bridge, "logout")
