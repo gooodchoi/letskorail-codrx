@@ -2,14 +2,19 @@ package com.example.letskorail
 
 import android.app.AlertDialog
 import android.app.DatePickerDialog
-import android.app.NotificationChannel
-import android.app.NotificationManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.widget.ArrayAdapter
@@ -21,8 +26,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
@@ -34,7 +37,6 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
-import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
 
@@ -74,13 +76,45 @@ class MainActivity : AppCompatActivity() {
     private val countdownHandler = Handler(Looper.getMainLooper())
     private var paymentDeadlineMs: Long = 0L
     private var countdownRunnable: Runnable? = null
-    private var isAppInForeground = false
+    private val reservationStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ReservationForegroundService.ACTION_STATUS_UPDATE) return
+
+            val attempts = intent.getIntExtra(ReservationForegroundService.EXTRA_ATTEMPTS, 0)
+            val message = intent.getStringExtra(ReservationForegroundService.EXTRA_MESSAGE).orEmpty()
+            val nextDelay = intent.getStringExtra(ReservationForegroundService.EXTRA_NEXT_DELAY_SEC)
+            val rawJson = intent.getStringExtra(ReservationForegroundService.EXTRA_RAW_JSON)
+
+            if (attempts > 0) {
+                attemptCountText.text = "조회 시도: ${attempts}회"
+            }
+            if (message.isNotBlank()) {
+                resultText.text = message
+            }
+
+            if (nextDelay == "completed") {
+                nextDelayText.text = "다음 조회 대기: 완료"
+                isReserving = false
+                isReservationPaused = false
+                updateReserveToggleButton(isPaused = false)
+                val parsed = parseReserveResponse(rawJson ?: "")
+                if (parsed.optBoolean("success", false)) {
+                    showReservationSuccess(parsed)
+                }
+                return
+            }
+
+            if (!nextDelay.isNullOrBlank()) {
+                nextDelayText.text = "다음 조회 대기: ${nextDelay}초"
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        createNotificationChannel()
         ensureNotificationPermission()
+        ensureBatteryOptimizationException()
 
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
@@ -208,7 +242,6 @@ class MainActivity : AppCompatActivity() {
 
             val date = SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(selectedDate.time)
             startReservationLoop(
-                bridge,
                 idInput.text.toString(),
                 pwInput.text.toString(),
                 departure,
@@ -276,12 +309,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        isAppInForeground = true
+        val filter = IntentFilter(ReservationForegroundService.ACTION_STATUS_UPDATE)
+        registerReceiver(reservationStatusReceiver, filter)
     }
 
     override fun onStop() {
         super.onStop()
-        isAppInForeground = false
+        unregisterReceiver(reservationStatusReceiver)
     }
 
     private fun setupStationSelectors() {
@@ -346,7 +380,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startReservationLoop(
-        bridge: PyObject,
         userId: String,
         password: String,
         departure: String,
@@ -370,54 +403,18 @@ class MainActivity : AppCompatActivity() {
         nextDelayText.text = "다음 조회 대기: -"
         resultText.text = "예매를 시작했습니다. 조건에 맞는 열차를 조회 중입니다."
 
-        Thread {
-            var attempts = 0
-            while (isReserving) {
-                if (isReservationPaused) {
-                    Thread.sleep(200)
-                    continue
-                }
-
-                attempts += 1
-                runOnUiThread {
-                    attemptCountText.text = "조회 시도: ${attempts}회"
-                    resultText.text = "[$attempts] 조회 시도 중..."
-                }
-
-                val raw = callPython(
-                    bridge,
-                    "reserve_once",
-                    userId,
-                    password,
-                    departure,
-                    arrival,
-                    date,
-                    minTime,
-                    maxTime
-                )
-
-                val parsed = parseReserveResponse(raw)
-                runOnUiThread {
-                    resultText.text = "[$attempts] ${parsed.optString("message", "응답 메시지가 없습니다.")}"
-                }
-
-                if (parsed.optBoolean("success", false)) {
-                    isReserving = false
-                    runOnUiThread {
-                        nextDelayText.text = "다음 조회 대기: 완료"
-                        showReservationSuccess(parsed)
-                    }
-                    break
-                }
-
-                val delaySec = randomizedDelay(avgIntervalSec)
-                runOnUiThread {
-                    nextDelayText.text = "다음 조회 대기: ${String.format(Locale.KOREA, "%.2f", delaySec)}초"
-                }
-
-                Thread.sleep(max(200L, (delaySec * 1000).toLong()))
-            }
-        }.start()
+        val startIntent = Intent(this, ReservationForegroundService::class.java).apply {
+            action = ReservationForegroundService.ACTION_START
+            putExtra(ReservationForegroundService.EXTRA_USER_ID, userId)
+            putExtra(ReservationForegroundService.EXTRA_PASSWORD, password)
+            putExtra(ReservationForegroundService.EXTRA_DEPARTURE, departure)
+            putExtra(ReservationForegroundService.EXTRA_ARRIVAL, arrival)
+            putExtra(ReservationForegroundService.EXTRA_DATE, date)
+            putExtra(ReservationForegroundService.EXTRA_MIN_TIME, minTime)
+            putExtra(ReservationForegroundService.EXTRA_MAX_TIME, maxTime)
+            putExtra(ReservationForegroundService.EXTRA_AVG_INTERVAL_SEC, avgIntervalSec)
+        }
+        ContextCompat.startForegroundService(this, startIntent)
     }
 
     private fun showReservationSuccess(parsed: JSONObject) {
@@ -435,33 +432,11 @@ class MainActivity : AppCompatActivity() {
         buttonBackToReserve.visibility = View.GONE
         startCountdownUi()
 
-        if (!isAppInForeground) {
-            showBackgroundSuccessNotification(popupText)
-            return
-        }
-
         AlertDialog.Builder(this)
             .setTitle("🎉 예매 성공")
             .setMessage(popupText)
             .setPositiveButton("확인", null)
             .show()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return
-        }
-
-        val channel = NotificationChannel(
-            NOTIFICATION_CHANNEL_ID,
-            "예매 알림",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "백그라운드에서 예매 성공 시 상단바 푸시 알림을 표시합니다."
-        }
-
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.createNotificationChannel(channel)
     }
 
     private fun ensureNotificationPermission() {
@@ -480,23 +455,16 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun showBackgroundSuccessNotification(message: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
+    private fun ensureBatteryOptimizationException() {
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
             return
         }
 
-        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_app_icon)
-            .setContentTitle("LET'S KORAIL 예매 성공")
-            .setContentText("탭해서 예매 정보를 확인하세요.")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .build()
-
-        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID_RESERVATION_SUCCESS, notification)
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        startActivity(intent)
     }
 
     private fun startCountdownUi() {
@@ -561,6 +529,12 @@ class MainActivity : AppCompatActivity() {
     private fun stopReservationLoopAndReturnToForm() {
         isReserving = false
         isReservationPaused = false
+
+        val stopIntent = Intent(this, ReservationForegroundService::class.java).apply {
+            action = ReservationForegroundService.ACTION_STOP
+        }
+        startService(stopIntent)
+
         nextDelayText.text = "다음 조회 대기: 중지됨"
         resultText.text = "예매 진행을 중지하고 조건 설정 화면으로 돌아왔습니다."
         reserveProgressContainer.visibility = View.GONE
@@ -575,6 +549,16 @@ class MainActivity : AppCompatActivity() {
             buttonReserveToggle.text = "취소"
             buttonReserveToggle.background = ContextCompat.getDrawable(this, R.drawable.bg_danger_button)
         }
+
+        if (!isReserving) {
+            return
+        }
+
+        val action = if (isPaused) ReservationForegroundService.ACTION_PAUSE else ReservationForegroundService.ACTION_RESUME
+        val intent = Intent(this, ReservationForegroundService::class.java).apply {
+            this.action = action
+        }
+        startService(intent)
     }
 
     private fun parseReserveResponse(raw: String): JSONObject {
@@ -707,12 +691,6 @@ class MainActivity : AppCompatActivity() {
         button.text = formatter.format(selectedDate.time)
     }
 
-    private fun randomizedDelay(avgSec: Double): Double {
-        val lower = avgSec * 0.5
-        val upper = avgSec * 1.5
-        return Random.nextDouble(lower, upper)
-    }
-
     private fun normalizeTime(input: String): String? {
         val digits = input.replace(":", "")
         if (digits.length != 4 || digits.any { !it.isDigit() }) return null
@@ -727,6 +705,11 @@ class MainActivity : AppCompatActivity() {
         isReservationPaused = false
         latestReservationNo = null
         countdownRunnable?.let { countdownHandler.removeCallbacks(it) }
+
+        val stopIntent = Intent(this, ReservationForegroundService::class.java).apply {
+            action = ReservationForegroundService.ACTION_STOP
+        }
+        startService(stopIntent)
 
         val result = callPython(bridge, "logout")
         if (result.startsWith("로그아웃 성공")) {
@@ -758,8 +741,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "KorailMainActivity"
-        private const val NOTIFICATION_CHANNEL_ID = "reservation_success_channel"
-        private const val NOTIFICATION_ID_RESERVATION_SUCCESS = 1001
         private const val REQUEST_POST_NOTIFICATIONS = 2001
 
         private val LINE_TO_STATIONS: Map<String, Set<String>> = mapOf(
