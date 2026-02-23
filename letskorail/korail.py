@@ -6,8 +6,6 @@ import base64
 import uuid
 from datetime import datetime, timedelta
 from typing import Tuple, Optional, Generator, Iterable, Dict, Union
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from .exceptions import (
     result_checker,
@@ -105,7 +103,6 @@ class Korail(object):
     _device = "AD"
     _version = "210222001"
     _key = "korail1234567890"
-    _timeout = 10
 
     _k_id = None
     _k_pw = None
@@ -127,27 +124,6 @@ class Korail(object):
         self._sess = requests.Session()
         self._sess.headers.update({"user-agent": ua})
 
-        retry = Retry(
-            total=3,
-            connect=3,
-            read=3,
-            backoff_factor=0.3,
-            status_forcelist=(429, 500, 502, 503, 504),
-            allowed_methods=None,
-            raise_on_status=False,
-        )
-        adapter = HTTPAdapter(max_retries=retry, pool_connections=20, pool_maxsize=20)
-        self._sess.mount("https://", adapter)
-        self._sess.mount("http://", adapter)
-
-    def _get(self, url, **kwargs):
-        kwargs.setdefault("timeout", self._timeout)
-        return self._sess.get(url, **kwargs)
-
-    def _post(self, url, data, **kwargs):
-        kwargs.setdefault("timeout", self._timeout)
-        return self._sess.post(url, data=data, **kwargs)
-
     def set_uuid(self, uuid_):
         self._uuid = uuid_
 
@@ -162,13 +138,13 @@ class Korail(object):
 
     def stations(self) -> Stations:
         """Get information for all stations"""
-        res = self._get(URL.STATION)
+        res = self._sess.get(URL.STATION)
         rst = res.json()
         if result_checker(rst):
             stns = rst["stns"]["stn"]
             stations_ = tuple(Station(st) for st in stns)
 
-        res = self._get(URL.STATION_INFO)
+        res = self._sess.get(URL.STATION_INFO)
         rst = res.json()
         if result_checker(rst):
             rst.update({"stations": stations_})
@@ -203,7 +179,7 @@ class Korail(object):
             }
         )
 
-        res = self._post(URL.LOGIN, data=data)
+        res = self._sess.post(URL.LOGIN, data=data)
         rst = res.json()
 
         if result_checker(rst):
@@ -216,7 +192,7 @@ class Korail(object):
 
     def logout(self) -> None:
         """Logout"""
-        self._get(URL.LOGOUT)
+        self._sess.get(URL.LOGOUT)
         self.logined = False
 
     def search_train_allday(
@@ -358,7 +334,7 @@ class Korail(object):
             }
         )
 
-        res = self._post(URL.SCHEDULE, data=data)
+        res = self._sess.post(URL.SCHEDULE, data=data)
         rst = res.json()
 
         trains = tuple()
@@ -375,7 +351,7 @@ class Korail(object):
 
         # Generator
         def car_seats(data):
-            res = self._post(URL.CAR_DETAIL, data=data)
+            res = self._sess.post(URL.CAR_DETAIL, data=data)
             rst = res.json()
             if result_checker(rst):
                 yield rst
@@ -385,7 +361,7 @@ class Korail(object):
             cars = list()
 
             for data in payload:
-                res = self._post(URL.CARS_INFO, data=data)
+                res = self._sess.post(URL.CARS_INFO, data=data)
                 rst = res.json()
 
                 if result_checker(rst):
@@ -583,7 +559,7 @@ class Korail(object):
                     }
                 )
 
-        res = self._post(URL.RESERVATION, data=data)
+        res = self._sess.post(URL.RESERVATION, data=data)
         rst = res.json()
         if result_checker(rst):
             return self.reservations(rst["h_pnr_no"])[0]
@@ -603,7 +579,7 @@ class Korail(object):
 
         data = self._req_data_builder()
 
-        res = self._post(URL.MY_RESERVATIONS, data=data)
+        res = self._sess.post(URL.MY_RESERVATIONS, data=data)
         rst = res.json()
 
         if result_checker(rst):
@@ -624,7 +600,7 @@ class Korail(object):
 
             for r in my_rsv:
                 data = self._req_data_builder({"hidPnrNo": r.rsv_no})
-                res = self._post(URL.MY_RESERVATION_DETAIL, data=data)
+                res = self._sess.post(URL.MY_RESERVATION_DETAIL, data=data)
                 rst = res.json()
                 if result_checker(rst):
                     r._set_seats(rst)
@@ -647,7 +623,7 @@ class Korail(object):
                 "txtPnrNo": rsv.rsv_no,
             }
         )
-        res = self._post(URL.RESERVATION_CANCEL, data=data)
+        res = self._sess.post(URL.RESERVATION_CANCEL, data=data)
         rst = res.json()
 
         return result_checker(rst)
@@ -663,7 +639,7 @@ class Korail(object):
             }
         )
 
-        res = self._post(URL.MY_TICKET_DETAIL, data=data)
+        res = self._sess.post(URL.MY_TICKET_DETAIL, data=data)
         rst = res.json()
 
         if result_checker(rst):
@@ -698,7 +674,7 @@ class Korail(object):
             }
         )
 
-        res = self._post(URL.MY_TICKETS, data=data)
+        res = self._sess.post(URL.MY_TICKETS, data=data)
         rst = res.json()
 
         if result_checker(rst):
@@ -729,7 +705,7 @@ class Korail(object):
             }
         )
 
-        res = self._post(URL.REFUND_INFO, data=data)
+        res = self._sess.post(URL.REFUND_INFO, data=data)
         rst = res.json()
 
         if result_checker(rst):
@@ -752,7 +728,7 @@ class Korail(object):
                 }
             )
 
-            res = self._post(URL.REFUND_REQ, data=data)
+            res = self._sess.post(URL.REFUND_REQ, data=data)
             rst = res.json()
 
             return result_checker(rst)
@@ -772,7 +748,7 @@ class Korail(object):
                     }
                 )
 
-                res = self._post(URL.PASS_TICKET_INFO, data=data)
+                res = self._sess.post(URL.PASS_TICKET_INFO, data=data)
                 rst = res.json()
 
                 if result_checker(rst):
@@ -829,7 +805,7 @@ class Korail(object):
             }
         )
 
-        res = self._post(URL.PASS_SCHEDULE, data=data)
+        res = self._sess.post(URL.PASS_SCHEDULE, data=data)
         rst = res.json()
 
         if result_checker(rst):
@@ -886,7 +862,7 @@ class Korail(object):
             }
         )
 
-        res = self._post(URL.PASS_RESERVATION, data=data)
+        res = self._sess.post(URL.PASS_RESERVATION, data=data)
         rst = res.json()
 
         if result_checker(rst):
