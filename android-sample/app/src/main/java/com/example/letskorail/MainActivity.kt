@@ -310,7 +310,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         val filter = IntentFilter(ReservationForegroundService.ACTION_STATUS_UPDATE)
-        registerReceiver(reservationStatusReceiver, filter)
+        registerReceiver(reservationStatusReceiver, filter,Context.RECEIVER_NOT_EXPORTED)
     }
 
     override fun onStop() {
